@@ -1,6 +1,7 @@
 import pygame
 import sys
 import time
+import os
 
 from minesweeper import Minesweeper, MinesweeperAI
 
@@ -49,6 +50,35 @@ lost = False
 # Show instructions initially
 instructions = True
 
+# Variables that track game state
+game_started = False
+game_over = False
+start_ticks = 0
+timer_stopped = None
+game_restarted = False
+final_time = None
+new_high_score = False
+
+def load_high_score(file_path="high_score.txt"):
+    if not os.path.exists(file_path):
+        return None
+    with open(file_path, "r") as file:
+        scores = file.readlines()
+    return [float(score.strip()) for score in scores]
+
+def save_high_score(score, file_path="high_score.txt"):
+    with open(file_path, "a") as file:
+        file.write(f"{score}\n")
+
+def display_high_score():
+    high_scores = load_high_score()
+    if high_scores:
+        high_score = min(high_scores)
+        high_score_text = smallFont.render(f"High Score: {high_score}", True, BLACK)
+        high_score_rect = high_score_text.get_rect(center=(5 * width / 6, height/4))
+        screen.blit(high_score_text, high_score_rect)
+
+# Main loop
 while True:
 
     # Check if game quit
@@ -93,7 +123,10 @@ while True:
             mouse = pygame.mouse.get_pos()
             if buttonRect.collidepoint(mouse):
                 instructions = False
+                game_started = True
+                start_ticks = pygame.time.get_ticks()
                 time.sleep(0.3)
+
 
         pygame.display.flip()
         continue
@@ -147,6 +180,57 @@ while True:
     flag_count_rect = flag_count_text.get_rect()
     flag_count_rect.midleft = flag_image_rect.midright
     screen.blit(flag_count_text, flag_count_rect)
+
+    # Implementing the timer
+    if lost or (game.mines == flags):
+        game_over = True
+        if timer_stopped is None:
+            timer_stopped = pygame.time.get_ticks()
+
+    if game_started:
+        if not game_over:
+            # Calculate elapsed time only if the game has started
+            elapsed_time = (pygame.time.get_ticks() - start_ticks) / 1000
+        else:
+            # If game is over, keep the timer stopped
+            elapsed_time = (timer_stopped - start_ticks) / 1000
+            if game.mines == flags:
+                final_time = elapsed_time
+
+        mins, secs = divmod(elapsed_time, 60)
+        # Display the timer nex to flag count
+        font = pygame.font.Font(OPEN_SANS, 36)
+        timer_surface = font.render(f"{int(mins):02}:{int(secs):02}", True, BLACK)
+        # Adjust the position of the timer
+        screen.blit(timer_surface, (flags_display_x + (width/6), flags_display_y))
+    
+    if game_restarted:
+        start_ticks = pygame.time.get_ticks()
+        game_restarted = False
+        timer_stopped = None
+        game_started = True
+        game_over = False
+
+    # High Scores
+    high_scores = load_high_score()
+    high_score = min(high_scores)
+    if high_score is not None:
+        display_high_score()
+
+    if final_time is not None:
+        if high_score is None:
+            save_high_score(final_time)
+
+        elif final_time < high_score and final_time not in high_scores:
+            save_high_score(final_time)
+            new_high_score = True
+    
+    if new_high_score:
+        t = "New High Score"
+        t = mediumFont.render(t, True, BLACK)
+        tRect = t.get_rect()
+        tRect.center = ((5 / 6) * width, (2 / 3) * height - 100)
+        screen.blit(t, tRect)
 
     # AI Move button
     aiButton = pygame.Rect(
@@ -217,6 +301,8 @@ while True:
             revealed = set()
             flags = set()
             lost = False
+            game_restarted = True
+            new_high_score = False
             continue
 
         # User-made move
